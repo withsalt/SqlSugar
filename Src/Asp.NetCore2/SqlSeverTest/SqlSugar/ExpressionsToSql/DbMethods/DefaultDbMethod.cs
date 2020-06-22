@@ -356,7 +356,7 @@ namespace SqlSugar
 
         public virtual string EqualTrue(string fieldName)
         {
-            return "( " + fieldName + "=1 )";
+            return "( " + fieldName + "='1' )";
         }
 
         public virtual string Null()
