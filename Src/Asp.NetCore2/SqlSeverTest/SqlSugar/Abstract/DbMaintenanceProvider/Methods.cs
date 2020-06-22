@@ -165,6 +165,57 @@ namespace SqlSugar
             return true;
         }
 
+        /// <summary>
+        /// Map基本数据库连接
+        /// </summary>
+        /// <returns></returns>
+        protected SqlSugarClient MapBaseClient()
+        {
+            var connection = this.Context.CurrentConnectionConfig.ConnectionString;
+            string[] dbNameKey = new string[] { "Database", "Initial Catalog" };
+            int start = -1;
+
+            foreach (var item in dbNameKey)
+            {
+                start = connection.IndexOf(item, StringComparison.OrdinalIgnoreCase);
+                if (start >= 0)
+                    break;
+            }
+            if (start < 0)
+                throw new Exception("Unknow connect string format, can not find database config node.");
+            int end = connection.IndexOf(';', start);
+            if (end <= start || (start + (end - start)) > connection.Length)
+                throw new Exception("Unknow connect string format.");
+
+            string dbKeyStr = connection.Substring(start, end - start);
+            if (string.IsNullOrEmpty(dbKeyStr))
+            {
+                throw new Exception($"Can not find db '{this.Context.Ado.Connection.Database}'.");
+            }
+            switch (this.Context.CurrentConnectionConfig.DbType)
+            {
+                case DbType.MySql:
+                    connection = connection.Replace(dbKeyStr, "Database=");
+                    break;
+                case DbType.PostgreSQL:
+                    connection = connection.Replace(dbKeyStr, "Database=postgres");
+                    break;
+                case DbType.SqlServer:
+                    connection = connection.Replace(dbKeyStr, "Database=master");
+                    break;
+                default:
+                    throw new Exception("Unsupport db type to create database.");
+            }
+
+            var newDb = new SqlSugarClient(new ConnectionConfig()
+            {
+                DbType = this.Context.CurrentConnectionConfig.DbType,
+                IsAutoCloseConnection = true,
+                ConnectionString = connection
+            });
+            return newDb;
+        }
+
         public virtual bool AddPrimaryKey(string tableName, string columnName)
         {
             tableName = this.SqlBuilder.GetTranslationTableName(tableName);

@@ -326,15 +326,7 @@ namespace SqlSugar
                     FileHelper.CreateDirectory(databaseDirectory);
                 }
             }
-            var oldDatabaseName = this.Context.Ado.Connection.Database;
-            var connection = this.Context.CurrentConnectionConfig.ConnectionString;
-            connection = connection.Replace(oldDatabaseName, "master");
-            var newDb = new SqlSugarClient(new ConnectionConfig()
-            {
-                DbType = this.Context.CurrentConnectionConfig.DbType,
-                IsAutoCloseConnection = true,
-                ConnectionString = connection
-            });
+            var newDb = MapBaseClient();
             if (!GetDataBaseList(newDb).Any(it => it.Equals(databaseName, StringComparison.CurrentCultureIgnoreCase)))
             {
                 var sql = CreateDataBaseSql;
