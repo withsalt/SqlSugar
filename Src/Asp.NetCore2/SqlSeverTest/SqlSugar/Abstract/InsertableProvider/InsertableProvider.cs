@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -388,9 +389,19 @@ namespace SqlSugar
             {
                 return;
             }
+            Type itemType = item.GetType();
             foreach (var column in EntityInfo.Columns)
             {
-                if (column.IsIgnore || column.IsOnlyIgnoreInsert) continue;
+                if (column.IsIgnore || column.IsOnlyIgnoreInsert) 
+                    continue;
+
+                PropertyInfo pInfo = itemType.GetProperty(column.PropertyInfo.Name);
+                if (pInfo == null)
+                {
+                    throw new TargetException($"Can not get property info from entity by name '{column.PropertyInfo.Name}'");
+                }
+                object value = pInfo.GetValue(item, null);
+
                 var columnInfo = new DbColumnInfo()
                 {
                     Value = column.PropertyInfo.GetValue(item, null),
