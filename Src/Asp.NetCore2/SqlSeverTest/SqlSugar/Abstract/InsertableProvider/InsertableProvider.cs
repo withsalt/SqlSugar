@@ -340,6 +340,10 @@ namespace SqlSugar
                     {
                         continue;
                     }
+                    if (item.IsJson)
+                    {
+                        paramters.IsJson = true;
+                    }
                     this.InsertBuilder.Parameters.Add(paramters);
                 }
             }
@@ -410,6 +414,10 @@ namespace SqlSugar
                     PropertyType = UtilMethods.GetUnderType(column.PropertyInfo),
                     TableId = i
                 };
+                if (column.IsJson)
+                {
+                    columnInfo.IsJson = true;
+                }
                 if (columnInfo.PropertyType.IsEnum())
                 {
                     columnInfo.Value = Convert.ToInt64(columnInfo.Value);
