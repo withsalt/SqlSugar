@@ -134,6 +134,7 @@
     <Compile Include="Interface\ISaveable.cs" />
     <Compile Include="Interface\ISqlSugarClient.cs" />
     <Compile Include="Interface\ITenant.cs" />
+    <Compile Include="Interface\ISimpleClient.cs" />
     <Compile Include="Realization\Oracle\Deleteable\OracleDeleteable.cs" />
     <Compile Include="Realization\Oracle\Insertable\OracleInsertable.cs" />
     <Compile Include="Realization\Oracle\Updateable\OracleUpdateable.cs" />
@@ -151,6 +152,7 @@
     <Compile Include="Realization\PostgreSQL\SqlBuilder\PostgreSQLInsertBuilder.cs" />
     <Compile Include="Realization\PostgreSQL\SqlBuilder\PostgreSQLQueryBuilder.cs" />
     <Compile Include="Realization\PostgreSQL\SqlBuilder\PostgreSQLUpdateBuilder.cs" />
+    <Compile Include="Realization\SqlServer\SqlBuilder\SqlServerBlueCopy.cs" />
     <Compile Include="SqlSugarClient.cs" />
     <Compile Include="Utilities\CallContext.cs" />
     <Compile Include="Utilities\ReflectionExtensions.cs" />
