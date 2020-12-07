@@ -42,6 +42,9 @@ namespace OrmTest
             var getByWhere2 = db.Queryable<Order>().Where(it => it.Id == DateTime.Now.Year).ToList();
             var getByFuns = db.Queryable<Order>().Where(it => SqlFunc.IsNullOrEmpty(it.Name)).ToList();
             var getByFuns2 = db.Queryable<Order>().GroupBy(it => it.Name).Select(it => SqlFunc.AggregateDistinctCount(it.Price)).ToList();
+            var getDicionary = db.Queryable<Order>().ToDictionary(it => it.Id, it => it.Name);
+            var getDicionaryList = db.Queryable<Order>().ToDictionaryList();
+            var getTest = db.Queryable<Order>().Where(it =>string.IsNullOrWhiteSpace( it.Name)).ToList();
             Console.WriteLine("#### Examples End ####");
         }
 
@@ -247,6 +250,17 @@ namespace OrmTest
                                    db.Queryable<Order>().Where(it => it.Name.Contains("a")), 
                                    db.Queryable<Order>().Where(it => it.Name.Contains("b"))
                                  ).ToList();
+
+
+
+            var query4 = db.Queryable<Order,OrderItem,Custom>(
+                              db.Queryable<Order>().Where(it => it.Name.Contains("a")),
+                              db.Queryable<OrderItem>().Where(it => it.CreateTime>DateTime.Now),
+                              db.Queryable<Custom>().Where(it => it.Name.Contains("b")),
+                              JoinType.Left, (o, i, c) => o.Id==i.OrderId,
+                              JoinType.Left,(o,i,c)=>o.CustomId==c.Id
+
+                            ).Select(o=>o).ToList();
 
             Console.WriteLine("#### Join Table End ####");
         }
