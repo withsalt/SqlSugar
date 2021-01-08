@@ -189,10 +189,10 @@ namespace SqlSugar
         {
             return Context.Queryable<T>().SingleAsync(whereExpression);
         }
-        public virtual Task<List<T>> GetPageListAsync(Expression<Func<T, bool>> whereExpression, PageModel page)
+        public async virtual Task<List<T>> GetPageListAsync(Expression<Func<T, bool>> whereExpression, PageModel page)
         {
             RefAsync<int> count = 0;
-            var result = Context.Queryable<T>().Where(whereExpression).ToPageListAsync(page.PageIndex, page.PageSize, count);
+            var result = await Context.Queryable<T>().Where(whereExpression).ToPageListAsync(page.PageIndex, page.PageSize, count);
             page.PageCount = count;
             return result;
         }
@@ -269,7 +269,7 @@ namespace SqlSugar
         }
         public virtual async Task<bool> DeleteByIdAsync(dynamic id)
         {
-            return await this.Context.Deleteable<T>().In(id).ExecuteCommand() > 0;
+            return await this.Context.Deleteable<T>().In(id).ExecuteCommandAsync() > 0;
         }
         public virtual async Task<bool> DeleteByIdsAsync(dynamic[] ids)
         {

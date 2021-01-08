@@ -80,6 +80,7 @@ namespace SqlSugar
         #region Check
         public virtual bool IsAnyTable(string tableName, bool isCache = true)
         {
+            Check.Exception(string.IsNullOrEmpty(tableName), "IsAnyTable tableName is not null");
             tableName = this.SqlBuilder.GetNoTranslationColumnName(tableName);
             var tables = GetTableInfoList(isCache);
             if (tables == null) return false;
@@ -178,7 +179,8 @@ namespace SqlSugar
         {
             tableName = this.SqlBuilder.GetTranslationTableName(tableName);
             var columnName = string.Join(",", columnNames);
-            string sql = string.Format(this.AddPrimaryKeySql, tableName, string.Format("PK_{0}_{1}", this.SqlBuilder.GetNoTranslationColumnName(columnNames.First()), this.SqlBuilder.GetNoTranslationColumnName(columnNames.First())), columnName);
+            var pkName = string.Format("PK_{0}_{1}", this.SqlBuilder.GetNoTranslationColumnName(tableName), columnName.Replace(",","_"));
+            string sql = string.Format(this.AddPrimaryKeySql, tableName,pkName, columnName);
             this.Context.Ado.ExecuteCommand(sql);
             return true;
         }

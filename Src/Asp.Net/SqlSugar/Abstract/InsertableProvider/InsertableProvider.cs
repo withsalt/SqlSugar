@@ -239,6 +239,7 @@ namespace SqlSugar
             result.InsertBuilder = this.InsertBuilder;
             result.Builder = this.SqlBuilder;
             result.Context = this.Context;
+            result.Inserts=this.InsertObjs;
             return result;
         }
 
@@ -477,7 +478,8 @@ namespace SqlSugar
                 }
                 if (column.IsJson&& columnInfo.Value!=null)
                 {
-                    columnInfo.Value = this.Context.Utilities.SerializeObject(columnInfo.Value);
+                    if(columnInfo.Value!=null)
+                       columnInfo.Value = this.Context.Utilities.SerializeObject(columnInfo.Value);
                 }
                 var tranColumn=EntityInfo.Columns.FirstOrDefault(it => it.IsTranscoding && it.DbColumnName.Equals(column.DbColumnName, StringComparison.CurrentCultureIgnoreCase));
                 if (tranColumn!=null&&columnInfo.Value.HasValue()) {
