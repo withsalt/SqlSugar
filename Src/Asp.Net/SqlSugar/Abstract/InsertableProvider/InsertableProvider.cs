@@ -475,7 +475,7 @@ namespace SqlSugar
                 {
                     columnInfo.IsArray = true;
                 }
-                if (columnInfo.PropertyType.IsEnum())
+                if (columnInfo.PropertyType.IsEnum()&& columnInfo.Value!=null)
                 {
                     columnInfo.Value = Convert.ToInt64(columnInfo.Value);
                 }
@@ -669,24 +669,5 @@ namespace SqlSugar
         }
         #endregion
 
-        #region Obsolete
-        [Obsolete]
-        public IInsertable<T> InsertColumns(Func<string, bool> insertColumMethod)
-        {
-            this.InsertBuilder.DbColumnInfoList = this.InsertBuilder.DbColumnInfoList.Where(it => insertColumMethod(it.PropertyName)).ToList();
-            return this;
-        }
-        [Obsolete]
-        public IInsertable<T> IgnoreColumns(Func<string, bool> ignoreColumMethod)
-        {
-            this.InsertBuilder.DbColumnInfoList = this.InsertBuilder.DbColumnInfoList.Where(it => !ignoreColumMethod(it.PropertyName)).ToList();
-            return this;
-        }
-        [Obsolete]
-        public IInsertable<T> Where(bool ignoreNullColumn, bool isOffIdentity = false)
-        {
-            return IgnoreColumns(ignoreNullColumn, isOffIdentity);
-        }
-        #endregion
     }
 }

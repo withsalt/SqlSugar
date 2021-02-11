@@ -4,6 +4,7 @@ using System.Data.SqlClient;
 using System.Dynamic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -114,6 +115,7 @@ namespace SqlSugar
         #endregion
 
         #region Sql Template
+        public Dictionary<string, string> AsTables=new Dictionary<string, string>();
         public virtual string SqlTemplate
         {
             get
@@ -205,6 +207,13 @@ namespace SqlSugar
                 return "{0} IN ({1}) ";
             }
         }
+        public virtual string EqualTemplate
+        {
+            get
+            {
+                return "{0} = {1} ";
+            }
+        }
         #endregion
 
         #region Common Methods
@@ -293,7 +302,15 @@ namespace SqlSugar
             if (!IsDisabledGobalFilter && this.Context.QueryFilter.GeFilterList.HasValue())
             {
                 var gobalFilterList = this.Context.QueryFilter.GeFilterList.Where(it => it.FilterName.IsNullOrEmpty()).ToList();
-                foreach (var item in gobalFilterList.Where(it => it.IsJoinQuery == !IsSingle()))
+
+                foreach (var item in gobalFilterList)
+                {
+                    if (item.GetType().Name.StartsWith("TableFilterItem"))
+                    {
+                        AppendTableFilter(item);
+                    }
+                }
+                foreach (var item in gobalFilterList.Where(it=>it.GetType().Name=="SqlFilterItem").Where(it => it.IsJoinQuery == !IsSingle()))
                 {
                     var filterResult = item.FilterValue(this.Context);
                     WhereInfos.Add(this.Builder.AppendWhereOrAnd(this.WhereInfos.IsNullOrEmpty(), filterResult.Sql + UtilConstants.Space));
@@ -304,6 +321,67 @@ namespace SqlSugar
                     }
                 }
             }
+        }
+
+        private void AppendTableFilter(SqlFilterItem item)
+        {
+            BindingFlags flag = BindingFlags.Instance | BindingFlags.NonPublic;
+            Type type = item.GetType();
+            PropertyInfo field = type.GetProperty("exp", flag);
+            Type ChildType = type.GetProperty("type", flag).GetValue(item,null) as Type;
+            var entityInfo = this.Context.EntityMaintenance.GetEntityInfo(ChildType);
+            var exp=field.GetValue(item,null) as Expression;
+            var isMain = ChildType == this.EntityType;
+            var isSingle = IsSingle();
+            var expValue = GetExpressionValue(exp, isSingle ? ResolveExpressType.WhereSingle : ResolveExpressType.WhereMultiple);
+            var sql = expValue.GetResultString();
+            var itName = (exp as LambdaExpression).Parameters[0].Name;
+            itName = this.Builder.GetTranslationColumnName(itName) + ".";
+            var isEasyJoin = this.EasyJoinInfos.Count > 0;
+            if (WhereInfos.Count == 0)
+            {
+                sql =( " WHERE " + sql);
+            }else
+            {
+                sql = (" AND " + sql);
+            }
+            if (isSingle)
+            {
+                if (ChildType != this.EntityType)
+                {
+                    return;
+                }
+            }
+            else if (isMain)
+            {
+                var shortName = this.Builder.GetTranslationColumnName(TableShortName) + ".";
+                sql = sql.Replace(itName, shortName);
+            }
+            else if (isEasyJoin)
+            {
+                var easyInfo = EasyJoinInfos.FirstOrDefault(it =>
+                   it.Value.Equals(entityInfo.DbTableName, StringComparison.CurrentCultureIgnoreCase) ||
+                   it.Value.Equals(entityInfo.EntityName, StringComparison.CurrentCultureIgnoreCase));
+                if (easyInfo.Key==null)
+                {
+                    return;
+                }
+                var shortName = this.Builder.GetTranslationColumnName(easyInfo.Key.Trim()) + ".";
+                sql = sql.Replace(itName, shortName);
+            }
+            else
+            {
+                var easyInfo = JoinQueryInfos.FirstOrDefault(it =>
+                it.TableName.Equals(entityInfo.DbTableName, StringComparison.CurrentCultureIgnoreCase) ||
+                it.TableName.Equals(entityInfo.EntityName, StringComparison.CurrentCultureIgnoreCase));
+                if (easyInfo == null)
+                {
+                    return;
+                }
+                var shortName = this.Builder.GetTranslationColumnName(easyInfo.ShortName.Trim()) + ".";
+                sql = sql.Replace(itName, shortName);
+            }
+            WhereInfos.Add(sql);
         }
 
         public virtual string GetExternalOrderBy(string externalOrderBy)
@@ -357,10 +435,22 @@ namespace SqlSugar
 
         public virtual string ToJoinString(JoinQueryInfo joinInfo)
         {
+            var name = joinInfo.TableName;
+            if (this.AsTables.Any())
+            {
+                if (this.Context.MappingTables != null && this.Context.MappingTables.Any(it => it.DbTableName == name))
+                {
+                    name = this.Context.MappingTables.First(it => it.DbTableName == name).EntityName;
+                }
+                if (this.AsTables.Any(it => it.Key == name))
+                {
+                    name = this.AsTables.First(it => it.Key == name).Value;
+                }
+            }
             return string.Format(
                 this.JoinTemplate,
                 joinInfo.JoinType.ToString() + UtilConstants.Space,
-                Builder.GetTranslationTableName(joinInfo.TableName) + UtilConstants.Space,
+                Builder.GetTranslationTableName(name) + UtilConstants.Space,
                 joinInfo.ShortName + UtilConstants.Space + (TableWithString == SqlWith.Null ? " " : TableWithString),
                 joinInfo.JoinWhere);
         }
@@ -484,7 +574,12 @@ namespace SqlSugar
         {
             get
             {
-                var result = Builder.GetTranslationTableName(EntityName);
+                var name = EntityName;
+                if (this.AsTables.Any(it=>it.Key==EntityName))
+                {
+                    name = this.AsTables.FirstOrDefault(it => it.Key == EntityName).Value;
+                }
+                var result = Builder.GetTranslationTableName(name);
                 result += UtilConstants.Space;
                 if (result.Contains("MergeTable") && result.Trim().EndsWith(" MergeTable"))
                 {

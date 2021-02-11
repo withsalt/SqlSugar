@@ -116,6 +116,8 @@ namespace SqlSugar
         #endregion
 
         #region Saveable
+        IStorageable<T> Storageable<T>(List<T> dataList) where T : class, new();
+        IStorageable<T> Storageable<T>(T data) where T : class, new();
         ISaveable<T> Saveable<T>(List<T> saveObjects) where T : class, new();
         ISaveable<T> Saveable<T>(T saveObject) where T : class, new();
         #endregion

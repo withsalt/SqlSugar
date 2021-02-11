@@ -129,6 +129,12 @@ namespace SqlSugar
         }
         public virtual ISugarQueryable<T> Mapper<TObject>(Expression<Func<T, List<TObject>>> mapperObject, Expression<Func<T, object>> mapperField)
         {
+            Check.Exception(mapperObject.ReturnType.Name == "IList`1", "Mapper no support IList , Use List<T>");
+            if (CallContext.MapperExpression.Value == null)
+            {
+                CallContext.MapperExpression.Value = new List<MapperExpression>();
+            }
+            CallContext.MapperExpression.Value.Add(new MapperExpression() { SqlBuilder = SqlBuilder, QueryBuilder = this.QueryBuilder, Type = MapperExpressionType.oneToN, FillExpression = mapperObject, MappingField1Expression = mapperField,Context = this.Context });
             return _Mapper<TObject>(mapperObject, mapperField);
         }
         public virtual ISugarQueryable<T> Mapper<TObject>(Expression<Func<T, TObject>> mapperObject, Expression<Func<T, object>> mapperField)
@@ -190,6 +196,70 @@ namespace SqlSugar
         public ISugarQueryable<T> WhereClass<ClassType>(ClassType whereClass, bool ignoreDefaultValue = false) where ClassType : class, new()
         {
             return WhereClass(new List<ClassType>() { whereClass }, ignoreDefaultValue);
+        }
+        public ISugarQueryable<T> WhereClassByPrimaryKey(List<T> list)  
+        {
+            _WhereClassByPrimaryKey(list);
+            return this;
+        }
+        public ISugarQueryable<T> WhereClassByPrimaryKey(T data)
+        {
+            _WhereClassByPrimaryKey(new List<T>() { data });
+            return this;
+        }
+
+        /// <summary>
+        ///  if a property that is primary key is a condition
+        /// </summary>
+        /// <param name="whereClassTypes"></param>
+        /// <returns></returns>
+        public ISugarQueryable<T> _WhereClassByPrimaryKey(List<T> whereClassTypes) 
+        {
+
+            if (whereClassTypes.HasValue())
+            {
+                var columns = this.Context.EntityMaintenance.GetEntityInfo<T>().Columns.Where(it => it.IsIgnore == false && it.IsPrimarykey == true).ToList();
+                Check.Exception(columns == null || columns.Count == 0, "{0} no primary key, Can not use WhereClassByPrimaryKey ", typeof(T).Name);
+                Check.Exception(this.QueryBuilder.IsSingle() == false, "No support join query");
+                List<IConditionalModel> whereModels = new List<IConditionalModel>();
+                foreach (var item in whereClassTypes)
+                {
+                    var cons = new ConditionalCollections();
+                    foreach (var column in columns)
+                    {
+                        WhereType WhereType = WhereType.And;
+                        var value = column.PropertyInfo.GetValue(item, null);
+                        if (cons.ConditionalList == null)
+                        {
+                            cons.ConditionalList = new List<KeyValuePair<WhereType, ConditionalModel>>();
+                            if (QueryBuilder.WhereInfos.IsNullOrEmpty() && whereModels.IsNullOrEmpty())
+                            {
+
+                            }
+                            else
+                            {
+                                WhereType = WhereType.Or;
+                            }
+                        }
+                        cons.ConditionalList.Add(new KeyValuePair<WhereType, ConditionalModel>(WhereType, new ConditionalModel()
+                        {
+                            ConditionalType = ConditionalType.Equal,
+                            FieldName = this.QueryBuilder.Builder.GetTranslationColumnName(column.DbColumnName),
+                            FieldValue = value.ObjToString()
+                        }));
+                    }
+                    if (cons.HasValue())
+                    {
+                        whereModels.Add(cons);
+                    }
+                }
+                this.Where(whereModels);
+            }
+            else
+            {
+                this.Where(" 1=2 ");
+            }
+            return this;
         }
         /// <summary>
         ///  if a property that is not empty is a condition
@@ -339,7 +409,7 @@ namespace SqlSugar
                     var whereIndex = QueryBuilder.WhereIndex;
                     string parameterName = this.SqlBuilder.SqlParameterKeyWord + "InPara" + whereIndex;
                     this.AddParameters(new SugarParameter(parameterName, inValues[0]));
-                    this.Where(string.Format(QueryBuilder.InTemplate, filed, parameterName));
+                    this.Where(string.Format(QueryBuilder.EqualTemplate, filed, parameterName));
                     QueryBuilder.WhereIndex++;
                 }
                 else
@@ -508,9 +578,9 @@ namespace SqlSugar
             {
                 return default(T);
             }
-            else if (result.Count == 2)
+            else if (result.Count >= 2)
             {
-                Check.Exception(true, ".Single()  result must not exceed one . You can use.First()");
+                Check.Exception(true,ErrorMessage.GetThrowMessage(".Single()  result must not exceed one . You can use.First()","使用single查询结果集不能大于1，适合主键查询，如果大于1你可以使用Queryable.First"));
                 return default(T);
             }
             else
@@ -609,15 +679,13 @@ namespace SqlSugar
             Check.Exception(this.MapperAction != null || this.MapperActionWithCache != null, "'Mapper’ needs to be written after ‘MergeTable’ ");
             Check.Exception(this.QueryBuilder.SelectValue.IsNullOrEmpty(), "MergeTable need to use Queryable.Select Method .");
             Check.Exception(this.QueryBuilder.Skip > 0 || this.QueryBuilder.Take > 0 || this.QueryBuilder.OrderByValue.HasValue(), "MergeTable  Queryable cannot Take Skip OrderBy PageToList  ");
-            ToSqlBefore();
-            var sql = QueryBuilder.ToSqlString();
-            var tableName = this.SqlBuilder.GetPackTable(sql, "MergeTable");
-            var mergeQueryable = this.Context.Queryable<ExpandoObject>();
-            mergeQueryable.QueryBuilder.Parameters = QueryBuilder.Parameters;
-            mergeQueryable.QueryBuilder.WhereIndex = QueryBuilder.WhereIndex + 1;
-            mergeQueryable.QueryBuilder.JoinIndex = QueryBuilder.JoinIndex + 1;
-            mergeQueryable.QueryBuilder.LambdaExpressions.ParameterIndex = QueryBuilder.LambdaExpressions.ParameterIndex;
-            return mergeQueryable.AS(tableName).Select<T>("*");
+            var sqlobj = this.ToSql();
+            var index = QueryBuilder.WhereIndex+1;
+            var result= this.Context.Queryable<T>().AS(SqlBuilder.GetPackTable(sqlobj.Key, "MergeTable")).AddParameters(sqlobj.Value).Select("*").With(SqlWith.Null);
+            result.QueryBuilder.WhereIndex = index;
+            result.QueryBuilder.LambdaExpressions.ParameterIndex = QueryBuilder.LambdaExpressions.ParameterIndex++;
+            result.QueryBuilder.LambdaExpressions.Index = QueryBuilder.LambdaExpressions.Index++;
+            return result;
         }
 
         public ISugarQueryable<T> Distinct()
@@ -1374,15 +1442,7 @@ namespace SqlSugar
         }
         protected ISugarQueryable<T> _As(string tableName, string entityName)
         {
-            IsAs = true;
-            OldMappingTableList = this.Context.MappingTables;
-            this.Context.MappingTables = this.Context.Utilities.TranslateCopy(this.Context.MappingTables);
-            if (this.Context.MappingTables.Any(it => it.EntityName == entityName))
-            {
-                this.Context.MappingTables.Add(this.Context.MappingTables.First(it => it.EntityName == entityName).DbTableName, tableName);
-            }
-            this.Context.MappingTables.Add(entityName, tableName);
-            this.QueryableMappingTableList = this.Context.MappingTables;
+            this.QueryBuilder.AsTables.Add(entityName, tableName);
             return this;
         }
         protected void _Filter(string FilterName, bool isDisabledGobalFilter)
@@ -2049,6 +2109,7 @@ namespace SqlSugar
             asyncQueryableBuilder.HavingInfos = this.QueryBuilder.HavingInfos;
             asyncQueryableBuilder.LambdaExpressions.ParameterIndex = this.QueryBuilder.LambdaExpressions.ParameterIndex;
             asyncQueryableBuilder.IgnoreColumns = this.QueryBuilder.IgnoreColumns;
+            asyncQueryableBuilder.AsTables = this.QueryBuilder.AsTables;
         }
         protected int SetCacheTime(int cacheDurationInSeconds)
         {
@@ -2222,6 +2283,22 @@ namespace SqlSugar
         public TResult Avg<TResult>(Expression<Func<T, T2, TResult>> expression)
         {
             return _Avg<TResult>(expression);
+        }
+        public Task<TResult> MaxAsync<TResult>(Expression<Func<T, T2, TResult>> expression)
+        {
+            return _MaxAsync<TResult>(expression);
+        }
+        public Task<TResult> MinAsync<TResult>(Expression<Func<T, T2, TResult>> expression)
+        {
+            return _MinAsync<TResult>(expression);
+        }
+        public Task<TResult> SumAsync<TResult>(Expression<Func<T, T2, TResult>> expression)
+        {
+            return _SumAsync<TResult>(expression);
+        }
+        public Task<TResult> AvgAsync<TResult>(Expression<Func<T, T2, TResult>> expression)
+        {
+            return _AvgAsync<TResult>(expression);
         }
         #endregion
 
@@ -2568,6 +2645,22 @@ namespace SqlSugar
         public TResult Avg<TResult>(Expression<Func<T, T2, T3, TResult>> expression)
         {
             return _Avg<TResult>(expression);
+        }
+        public Task<TResult> MaxAsync<TResult>(Expression<Func<T, T2,T3, TResult>> expression)
+        {
+            return _MaxAsync<TResult>(expression);
+        }
+        public Task<TResult> MinAsync<TResult>(Expression<Func<T, T2,T3, TResult>> expression)
+        {
+            return _MinAsync<TResult>(expression);
+        }
+        public Task<TResult> SumAsync<TResult>(Expression<Func<T, T2,T3, TResult>> expression)
+        {
+            return _SumAsync<TResult>(expression);
+        }
+        public Task<TResult> AvgAsync<TResult>(Expression<Func<T, T2,T3, TResult>> expression)
+        {
+            return _AvgAsync<TResult>(expression);
         }
         #endregion
 
@@ -3387,6 +3480,41 @@ namespace SqlSugar
             _GroupBy(expression);
             return this;
         }
+        public new ISugarQueryable<T, T2, T3, T4, T5> Having(Expression<Func<T, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public ISugarQueryable<T, T2, T3, T4, T5> Having(Expression<Func<T, T2, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public ISugarQueryable<T, T2, T3, T4, T5> Having(Expression<Func<T, T2, T3, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public ISugarQueryable<T, T2, T3, T4, T5> Having(Expression<Func<T, T2, T3, T4, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public ISugarQueryable<T, T2, T3, T4,T5> Having(Expression<Func<T, T2, T3, T4, T5, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public new ISugarQueryable<T, T2, T3, T4,T5> Having(string whereString, object whereObj)
+        {
+            base.Having(whereString, whereObj);
+            return this;
+        }
         #endregion
 
         #region Aggr
@@ -3772,6 +3900,46 @@ namespace SqlSugar
         public ISugarQueryable<T, T2, T3, T4, T5, T6> GroupBy(Expression<Func<T, T2, T3, T4, T5, T6, object>> expression)
         {
             _GroupBy(expression);
+            return this;
+        }
+        public new ISugarQueryable<T, T2, T3, T4, T5, T6> Having(Expression<Func<T, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public ISugarQueryable<T, T2, T3, T4, T5, T6> Having(Expression<Func<T, T2, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public ISugarQueryable<T, T2, T3, T4, T5, T6> Having(Expression<Func<T, T2, T3, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public ISugarQueryable<T, T2, T3, T4, T5, T6> Having(Expression<Func<T, T2, T3, T4, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public ISugarQueryable<T, T2, T3, T4, T5, T6> Having(Expression<Func<T, T2, T3, T4, T5, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+        public ISugarQueryable<T, T2, T3, T4, T5, T6> Having(Expression<Func<T, T2, T3, T4, T5,T6, bool>> expression)
+        {
+            this._Having(expression);
+            return this;
+        }
+
+        public new ISugarQueryable<T, T2, T3, T4, T5,T6> Having(string whereString, object whereObj)
+        {
+            base.Having(whereString, whereObj);
             return this;
         }
         #endregion
