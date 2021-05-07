@@ -13,7 +13,7 @@ namespace SqlSugar
         IgnoreColumnList IgnoreColumns { get; set; }
         IgnoreColumnList IgnoreInsertColumns { get; set; }
         Dictionary<string, object> TempItems { get; set; }
-
+        ConfigQuery ConfigQuery { get; set; }
 
         bool IsSystemTablesConfig { get; }
         Guid ContextID { get; set; }
@@ -160,7 +160,11 @@ namespace SqlSugar
         IUpdateable<T> Updateable<T>(Expression<Func<T, T>> columns) where T : class, new();
         IUpdateable<T> Updateable<T>(List<T> UpdateObjs) where T : class, new();
         IUpdateable<T> Updateable<T>(T UpdateObj) where T : class, new();
-        IUpdateable<T> Updateable<T>(T[] UpdateObjs) where T : class, new(); 
+        IUpdateable<T> Updateable<T>(T[] UpdateObjs) where T : class, new();
+        #endregion
+
+        #region Cache
+        SugarCacheProvider DataCache { get; }
         #endregion
     }
 }

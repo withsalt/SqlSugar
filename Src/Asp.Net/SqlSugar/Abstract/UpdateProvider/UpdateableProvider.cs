@@ -34,6 +34,7 @@ namespace SqlSugar
         public DiffLogModel diffModel { get; set; }
         private Action RemoveCacheFunc { get; set; }
         private int SetColumnsIndex { get; set; }
+        private List<DbColumnInfo> columns { get; set; }
         #endregion
 
         #region Core
@@ -94,6 +95,15 @@ namespace SqlSugar
             {
                 var cacheService = this.Context.CurrentConnectionConfig.ConfigureExternalServices.DataInfoCacheService;
                 CacheSchemeMain.RemoveCache(cacheService, this.Context.EntityMaintenance.GetTableName<T>());
+            };
+            return this;
+        }
+        public IUpdateable<T> RemoveDataCache(string likeString)
+        {
+            this.RemoveCacheFunc = () =>
+            {
+                var cacheService = this.Context.CurrentConnectionConfig.ConfigureExternalServices.DataInfoCacheService;
+                CacheSchemeMain.RemoveCacheByLike(cacheService,likeString);
             };
             return this;
         }
@@ -173,6 +183,20 @@ namespace SqlSugar
         }
 
         #region Update by object
+        public IUpdateable<T> CallEntityMethod(Expression<Action<T>> method)
+        {
+            ThrowUpdateByExpression();
+            if (this.UpdateObjs.HasValue())
+            {
+                var expression = (LambdaExpression.Lambda(method).Body as LambdaExpression).Body;
+                Check.Exception(!(expression is MethodCallExpression), method.ToString() + " is not method");
+                var callExpresion = expression as MethodCallExpression;
+                UtilMethods.DataInoveByExpresson(this.UpdateObjs, callExpresion);
+                this.UpdateBuilder.DbColumnInfoList = new List<DbColumnInfo>();
+                Init();
+            }
+            return this;
+        }
 
         public IUpdateable<T> WhereColumns(Expression<Func<T, object>> columns)
         {
@@ -184,6 +208,7 @@ namespace SqlSugar
             if (this.WhereColumnList == null) this.WhereColumnList = new List<string>();
             foreach (var item in whereColumns)
             {
+                _WhereColumn(item);
                 this.WhereColumnList.Add(item);
             }
             return this;
@@ -193,15 +218,18 @@ namespace SqlSugar
 
             ThrowUpdateByExpression();
             if (this.WhereColumnList == null) this.WhereColumnList = new List<string>();
+            _WhereColumn(columnName);
             this.WhereColumnList.Add(columnName);
             return this;
         }
+
         public IUpdateable<T> WhereColumns(string[] columnNames)
         {
             ThrowUpdateByExpression();
             if (this.WhereColumnList == null) this.WhereColumnList = new List<string>();
             foreach (var columnName in columnNames)
             {
+                _WhereColumn(columnName);
                 this.WhereColumnList.Add(columnName);
             }
             return this;
@@ -279,6 +307,10 @@ namespace SqlSugar
             Check.Exception(!(binaryExp.Left is MemberExpression) && !(binaryExp.Left is UnaryExpression), "No support {0}", columns.ToString());
             Check.Exception(ExpressionTool.IsConstExpression(binaryExp.Left as MemberExpression), "No support {0}", columns.ToString());
             var expResult = UpdateBuilder.GetExpressionValue(columns, ResolveExpressType.WhereSingle).GetResultString().Replace(")", " )").Replace("(", "( ").Trim().TrimStart('(').TrimEnd(')');
+            if (expResult.EndsWith(" IS NULL  ")) 
+            {
+                expResult = Regex.Split(expResult, " IS NULL  ")[0]+" = NULL ";
+            }
             string key = SqlBuilder.GetNoTranslationColumnName(expResult);
             UpdateBuilder.SetValues.Add(new KeyValuePair<string, string>(SqlBuilder.GetTranslationColumnName(key), expResult));
             this.UpdateBuilder.DbColumnInfoList = this.UpdateBuilder.DbColumnInfoList.Where(it => (UpdateParameterIsNull == false && IsPrimaryKey(it)) || UpdateBuilder.SetValues.Any(v => SqlBuilder.GetNoTranslationColumnName(v.Key).Equals(it.DbColumnName, StringComparison.CurrentCultureIgnoreCase) || SqlBuilder.GetNoTranslationColumnName(v.Key).Equals(it.PropertyName, StringComparison.CurrentCultureIgnoreCase)) || it.IsPrimarykey == true).ToList();
@@ -302,7 +334,7 @@ namespace SqlSugar
 
         public IUpdateable<T> Where(Expression<Func<T, bool>> expression)
         {
-            Check.Exception(UpdateObjs.Length > 1, ErrorMessage.GetThrowMessage("update List no support where","集合更新不支持Where请使用WhereColumns"));
+            Check.Exception(UpdateObjectNotWhere()&&UpdateObjs.Length > 1, ErrorMessage.GetThrowMessage("update List no support where","集合更新不支持Where请使用WhereColumns"));
             var expResult = UpdateBuilder.GetExpressionValue(expression, ResolveExpressType.WhereSingle);
             var whereString = expResult.GetResultString();
             if (expression.ToString().Contains("Subqueryable()"))
@@ -314,7 +346,7 @@ namespace SqlSugar
         }
         public IUpdateable<T> Where(string whereSql, object parameters = null)
         {
-            Check.Exception(UpdateObjs.Length > 1, ErrorMessage.GetThrowMessage("update List no support where", "集合更新不支持Where请使用WhereColumns"));
+            Check.Exception(UpdateObjectNotWhere() && UpdateObjs.Length > 1, ErrorMessage.GetThrowMessage("update List no support where", "集合更新不支持Where请使用WhereColumns"));
             if (whereSql.HasValue())
             {
                 UpdateBuilder.WhereValues.Add(whereSql);
@@ -327,16 +359,22 @@ namespace SqlSugar
         }
         public IUpdateable<T> Where(string fieldName, string conditionalType, object fieldValue)
         {
-            Check.Exception(UpdateObjs.Length > 1, ErrorMessage.GetThrowMessage("update List no support where", "集合更新不支持Where请使用WhereColumns"));
+            Check.Exception(UpdateObjectNotWhere() && UpdateObjs.Length > 1, ErrorMessage.GetThrowMessage("update List no support where", "集合更新不支持Where请使用WhereColumns"));
             var whereSql = this.SqlBuilder.GetWhere(fieldName, conditionalType, 0);
             this.Where(whereSql);
             string parameterName = this.SqlBuilder.SqlParameterKeyWord + fieldName + "0";
             this.UpdateBuilder.Parameters.Add(new SugarParameter(parameterName, fieldValue));
             return this;
-        } 
+        }
         #endregion
 
         #region Helper
+
+        private bool UpdateObjectNotWhere()
+        {
+            return this.Context.CurrentConnectionConfig.DbType != DbType.MySql && this.Context.CurrentConnectionConfig.DbType != DbType.SqlServer;
+        }
+
         private void AppendSets()
         {
             if (SetColumnsIndex > 0)
@@ -359,6 +397,16 @@ namespace SqlSugar
             Before(sql);
             return sql;
         }
+
+        private void _WhereColumn(string columnName)
+        {
+            var columnInfos = columns.Where(it => it.DbColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase) || it.PropertyName.Equals(columnName, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (!this.UpdateBuilder.DbColumnInfoList.Any(y => y.DbColumnName == columnInfos.First().DbColumnName))
+            {
+                this.UpdateBuilder.DbColumnInfoList.AddRange(columnInfos);
+            }
+        }
+
         private void AutoRemoveDataCache()
         {
             var moreSetts = this.Context.CurrentConnectionConfig.MoreSettings;
@@ -395,6 +443,7 @@ namespace SqlSugar
                 }
                 ++i;
             }
+            this.columns = this.UpdateBuilder.DbColumnInfoList;
         }
         private void CheckTranscodeing(bool checkIsJson = true)
         {
@@ -720,11 +769,11 @@ namespace SqlSugar
 
         private void ThrowUpdateByExpression()
         {
-            Check.Exception(UpdateParameterIsNull == true, ErrorMessage.GetThrowMessage("no support SetColumns and Where ", "根据对象进行更新 db.Updateable(现有集合对象) 禁止使用 SetColumns和Where,你可以使用 WhereColumns UpdateColumns 等。更新分为2种方式 1.根据表达式更新 2.根据实体或者集合更新， 具体用法请查看文档 "));
+            Check.Exception(UpdateParameterIsNull == true, ErrorMessage.GetThrowMessage(" no support UpdateColumns and WhereColumns", "根据表达式更新 db.Updateable<T>() 禁止使用 UpdateColumns和WhereColumns,你可以使用 SetColumns Where 等。更新分为2种方式 1.根据表达式更新 2.根据实体或者集合更新， 具体用法请查看文档 "));
         }
         private void ThrowUpdateByObject()
         {
-            Check.Exception(UpdateParameterIsNull == false, ErrorMessage.GetThrowMessage("no support UpdateColumns and WhereColumns ", "根据表达式进行更新 禁止使用 UpdateColumns和WhereColumns ,你可以使用SetColumns 和 Where。 更新分为2种方式 1.根据表达式更新 2.根据实体或者集合更新 ， 具体用法请查看文档 "));
+            Check.Exception(UpdateParameterIsNull == false, ErrorMessage.GetThrowMessage(" no support SetColumns and Where", "根据对像更新 db.Updateabe(对象) 禁止使用 SetColumns和Where ,你可以使用WhereColumns 和  UpdateColumns。 更新分为2种方式 1.根据表达式更新 2.根据实体或者集合更新 ， 具体用法请查看文档 "));
         }
         #endregion
     }

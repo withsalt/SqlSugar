@@ -6,6 +6,7 @@ using System.Data.SqlClient;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
@@ -133,6 +134,7 @@ namespace SqlSugar
             itemSql = Regex.Replace(itemSql, string.Format(@"\+{0} ", "\\" + itemParameter.ParameterName), "+" + newName +" ", RegexOptions.IgnoreCase);
             itemSql = Regex.Replace(itemSql, string.Format(@" {0}\+", "\\" + itemParameter.ParameterName)," "+ newName + "+", RegexOptions.IgnoreCase);
             itemSql = Regex.Replace(itemSql, string.Format(@"\|\|{0}\|\|", "\\" + itemParameter.ParameterName), "+" + newName + "+", RegexOptions.IgnoreCase);
+            itemSql = Regex.Replace(itemSql, string.Format(@"\={0}\+", "\\" + itemParameter.ParameterName), "=" + newName + "+", RegexOptions.IgnoreCase);
             return itemSql;
         }
         internal static Type GetRootBaseType(Type entityType)
@@ -243,7 +245,10 @@ namespace SqlSugar
         {
             return Convert.ToInt64(string.Join("", bytes).PadRight(20, '0'));
         }
-
+        public static object GetPropertyValue<T>(T t, string PropertyName)
+        {
+            return t.GetType().GetProperty(PropertyName).GetValue(t, null);
+        }
         internal static string GetMD5(string myString)
         {
             MD5 md5 = new MD5CryptoServiceProvider();
@@ -320,5 +325,35 @@ namespace SqlSugar
             }
         }
 
+        public static void DataInoveByExpresson<Type>(Type[] datas, MethodCallExpression callExpresion)
+        {
+            var methodInfo = callExpresion.Method;
+            foreach (var item in datas)
+            {
+                if (callExpresion.Arguments.Count == 0)
+                {
+                    methodInfo.Invoke(item, null);
+                }
+                else
+                {
+                    List<object> methodParameters = new List<object>();
+                    foreach (var callItem in callExpresion.Arguments)
+                    {
+                        var parameter = callItem.GetType().GetProperties().FirstOrDefault(it => it.Name == "Value");
+                        if (parameter == null)
+                        {
+                            var value = LambdaExpression.Lambda(callItem).Compile().DynamicInvoke();
+                            methodParameters.Add(value);
+                        }
+                        else
+                        {
+                            var value = parameter.GetValue(callItem, null);
+                            methodParameters.Add(value);
+                        }
+                    }
+                    methodInfo.Invoke(item, methodParameters.ToArray());
+                }
+            }
+        }
     }
 }

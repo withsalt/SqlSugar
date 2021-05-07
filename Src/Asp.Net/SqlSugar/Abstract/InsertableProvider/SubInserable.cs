@@ -72,8 +72,13 @@ namespace SqlSugar
             }
             return resul;
         }
+        [Obsolete("use ExecuteCommand")]
+        public object ExecuteReturnPrimaryKey() 
+        {
+            return ExecuteCommand();
+        }
 
-        public object ExecuteReturnPrimaryKey()
+        public object ExecuteCommand()
         {
             var isNoTrean = this.Context.Ado.Transaction == null;
             try
@@ -160,6 +165,10 @@ namespace SqlSugar
                             {
                                 child.GetType().GetProperty(subMemberName).SetValue(child, pkValue);
                             }
+                        }
+                        if (!(childList as IEnumerable<object>).Any())
+                        {
+                            continue;
                         }
                         var type = (childList as IEnumerable<object>).First().GetType();
                         this.Context.InitMappingInfo(type);

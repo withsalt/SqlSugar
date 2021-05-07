@@ -134,7 +134,22 @@ namespace SqlSugar
                     base.Start();
                     string parameterName = this.Context.SqlParameterKeyWord + ExpressionConst.Const + this.Context.ParameterIndex;
                     parameter.Context.Result.Append(base.Context.GetEqString(memberName, parameterName));
-                    this.Context.Parameters.Add(new SugarParameter(parameterName, parameter.CommonTempData));
+                    var addItem = new SugarParameter(parameterName, parameter.CommonTempData);
+                    var dataType = UtilMethods.GetUnderType(item.Type);
+                    if (addItem.Value == null && dataType == UtilConstants.DateType)
+                    {
+                        addItem.DbType = System.Data.DbType.Date;
+                    }
+                    if (addItem.Value == null && dataType.IsIn(UtilConstants.FloatType,UtilConstants.IntType,UtilConstants.LongType,UtilConstants.DecType,UtilConstants.DobType))
+                    {
+                        addItem.DbType = System.Data.DbType.Int32;
+                    }
+                    if (addItem.Value == null && dataType == UtilConstants.BoolType)
+                    {
+                        addItem.DbType = System.Data.DbType.Boolean;
+                    }
+
+                    this.Context.Parameters.Add(addItem);
                     this.Context.ParameterIndex++;
                 }
                 else if (item is MemberExpression)

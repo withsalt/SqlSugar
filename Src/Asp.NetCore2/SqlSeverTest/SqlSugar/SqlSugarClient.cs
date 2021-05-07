@@ -52,7 +52,7 @@ namespace SqlSugar
         public bool IsSystemTablesConfig => this.Context.IsSystemTablesConfig;
         public ConnectionConfig CurrentConnectionConfig { get { return _CurrentConnectionConfig; } set { _CurrentConnectionConfig = value; } }
         public Guid ContextID { get { return this.Context.ContextID; } set { this.Context.ContextID = value; } }
-
+        public ConfigQuery ConfigQuery { get { return this.Context.ConfigQuery; } set { this.Context.ConfigQuery = value; } }
 
         public MappingTableList MappingTables { get { return _MappingTables; } set { _MappingTables = value; } }
         public MappingColumnList MappingColumns { get { return _MappingColumns; } set { _MappingColumns = value; } }
@@ -579,7 +579,7 @@ namespace SqlSugar
         public SqlSugarProvider GetConnection(dynamic configId)
         {
             InitTenant();
-            var db = this._AllClients.FirstOrDefault(it => it.ConnectionConfig.ConfigId == configId);
+            var db = this._AllClients.FirstOrDefault(it =>Convert.ToString(it.ConnectionConfig.ConfigId) ==Convert.ToString(configId));
             if (db == null)
             {
                 Check.Exception(true, "ConfigId was not found {0}", configId);
@@ -588,6 +588,7 @@ namespace SqlSugar
             {
                 db.Context = new SqlSugarProvider(db.ConnectionConfig);
             }
+            var intiAop=db.Context.Aop;
             return db.Context;
         }
         public void ChangeDatabase(dynamic configId)
@@ -715,6 +716,13 @@ namespace SqlSugar
             AllClientEach(it => it.Ado.RollbackTran());
         }
 
+        #endregion
+
+        #region Cache
+        public SugarCacheProvider DataCache 
+        { 
+            get { return this.Context.DataCache; } 
+        }
         #endregion
 
         #region Other method

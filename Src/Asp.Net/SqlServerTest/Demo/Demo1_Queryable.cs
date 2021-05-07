@@ -5,7 +5,6 @@ using System.Data;
 using System.Dynamic;
 using System.Linq;
 using System.Text;
-
 namespace OrmTest
 {
     public class Demo1_Queryable
@@ -22,6 +21,80 @@ namespace OrmTest
             SqlFuncTest();
             Subquery();
             ReturnType();
+            ConfiQuery();
+        }
+
+        private static void ConfiQuery()
+        {
+            var db = GetInstance();
+            List<DataDictionary> datas = new List<DataDictionary>();
+            datas.Add(new DataDictionary() { Code="1", Name="男",Type="sex" });
+            datas.Add(new DataDictionary() { Code = "2", Name = "女", Type = "sex" });
+            datas.Add(new DataDictionary() { Code = "1", Name = "南通市", Type = "city" });
+            datas.Add(new DataDictionary() { Code = "2", Name = "苏州市", Type = "city" });
+            datas.Add(new DataDictionary() { Code = "1", Name = "江苏省", Type = "province" });
+            datas.Add(new DataDictionary() { Code = "2", Name = "湖南省", Type = "province" });
+
+            db.CodeFirst.InitTables<DataDictionary>();
+            db.CodeFirst.InitTables<Person>();
+            db.Insertable(datas).ExecuteCommand();
+
+            if (!db.ConfigQuery.Any()) 
+            {
+                var types= db.Queryable<DataDictionary>().Select(it => it.Type).Distinct().ToList();
+                foreach (var type in types)
+                {
+                    db.ConfigQuery.SetTable<DataDictionary>(it => it.Code, it => it.Name, type, it => it.Type == type);
+                }
+
+                db.ConfigQuery.SetTable<Order>(it => it.Id, it => it.Name, "01", it => it.Id > 1);
+                db.ConfigQuery.SetTable<Order>(it => it.Id, it => it.Name, "02", it => it.Id > 2);
+                db.ConfigQuery.SetTable<Order>(it => it.Id, it => it.Name, null);
+            }
+
+
+            var res=db.Queryable<Person>().Select(it => new Person()
+            {
+                 Id=it.Id.SelectAll(),
+                 SexName=it.SexId.GetConfigValue<DataDictionary>("sex"),
+                 ProviceName = it.SexId.GetConfigValue<DataDictionary>("province"),
+                 CityName = it.SexId.GetConfigValue<DataDictionary>("city"),
+            }).ToList();//也支持支持写在Where或者Orderby
+
+
+            db.DbMaintenance.TruncateTable("DataDictionary");
+      
+            var list = db.Queryable<OrderItem>().Select(it => new OrderItem
+            {
+                ItemId = it.ItemId.SelectAll(),
+                OrderName = it.OrderId.GetConfigValue<Order>("01")
+            }).ToList();
+            var list2 = db.Queryable<OrderItem>().Select(it => new OrderItem
+            {
+                ItemId = it.ItemId.SelectAll(),
+                OrderName = it.OrderId.GetConfigValue<Order>("02")
+            }).ToList();
+            var list3 = db.Queryable<OrderItem>().Select(it => new OrderItem
+            {
+                ItemId = it.ItemId.SelectAll(),
+                OrderName = it.OrderId.GetConfigValue<Order>()
+            }).ToList();
+
+            var list4 = db.Queryable<OrderItem>().Select(it => new OrderItem
+            {
+                ItemId = it.ItemId.SelectAll(),
+                OrderName = it.OrderId.GetConfigValue<Order>()
+            })
+            .Where(it=>it.OrderId.GetConfigValue<Order>()== "order1")
+            .OrderBy(it=>it.OrderId.GetConfigValue<Order>()).ToList();
+
+            var list5 = db.Queryable<Order, OrderItem>((o, i) => o.Id == i.OrderId)
+                        .OrderBy((o,i)=>i.OrderId.GetConfigValue<Order>(),OrderByType.Desc)
+                        .Select<ViewOrder>((o,i)=>new ViewOrder() { 
+                           Id= o.Id.SelectAll(),
+                           Name=i.OrderId.GetConfigValue<Order>()
+                        })
+                        .ToList();
         }
 
         private static void EasyExamples()
@@ -45,6 +118,24 @@ namespace OrmTest
             var getDicionary = db.Queryable<Order>().ToDictionary(it => it.Id, it => it.Name);
             var getDicionaryList = db.Queryable<Order>().ToDictionaryList();
             var getTest = db.Queryable<Order>().Where(it =>string.IsNullOrWhiteSpace( it.Name)).ToList();
+            var test01 = db.Queryable<Order>().PartitionBy(it => it.Id).ToList();
+            var q1 = db.Queryable<Order>().Take(1);
+            var q2 = db.Queryable<Order>().Take(2);
+            var test02 = db.Union(q1, q2).ToList();
+            var test03 = db.Queryable<Order>().Take(1).ToList();
+            var dp = DateTime.Now;
+            var test05 = db.Queryable<Order>().Where(it => it.CreateTime.Month==  dp.Month).ToList();
+            var test06 = db.Queryable<Order>()
+                   .ToPivotTable(it => it.Id, it => it.Name, it => it.Sum(x => x.Price));
+
+            var test07 = db.Queryable<Order>()
+            .ToPivotList(it => it.Id, it => it.Name, it => it.Sum(x => x.Price));
+
+            var test08 = db.Queryable<Order>()
+            .ToPivotJson(it => it.Id, it => it.Name, it => it.Sum(x => x.Price));
+
+            var test09 = db.Queryable<Order>().PartitionBy(it=>it.Id).ToPageListAsync(1,2,0);
+            test09.Wait();
             Console.WriteLine("#### Examples End ####");
         }
 
@@ -122,6 +213,11 @@ namespace OrmTest
                 customName2 = SqlFunc.Subqueryable<Custom>().Where("it.CustomId = id").Where(s => true).Select(s => s.Name)
             }).ToList();
 
+            var list1 = db.Queryable<Order>().Select(it => new
+            {
+                id = SqlFunc.Subqueryable<Custom>().Where(s => s.Id == 1).Sum(s => s.Id) * 1
+            }).ToList();
+
             var list2 = db.Queryable<Order>().Where(it =>
             SqlFunc.Subqueryable<OrderItem>() 
              .LeftJoin<OrderItem>((i,y)=>i.ItemId==y.ItemId)
@@ -183,7 +279,10 @@ namespace OrmTest
 
             db.Insertable(new Tree() { Id = 222, Name = "child11", ParentId = 11 }).ExecuteCommand();
             var tree = db.Queryable<Tree>().ToTree(it=>it.Child,it=>it.ParentId,0);
-      
+            var parentList = db.Queryable<Tree>().ToParentList(it => it.ParentId, 22);
+            var parentList2 = db.Queryable<Tree>().ToParentList(it => it.ParentId, 222);
+            var parentList3 = db.Queryable<Tree>().ToParentList(it => it.ParentId, 2);
+
             //one to one
             var list2 = db.Queryable<OrderItemInfo>().Mapper(it => it.Order, it => it.OrderId).ToList();
 

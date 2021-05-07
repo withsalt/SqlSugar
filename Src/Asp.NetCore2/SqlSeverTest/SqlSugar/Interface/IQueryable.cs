@@ -14,12 +14,15 @@ namespace SqlSugar
         SqlSugarProvider Context { get; set; }
         ISqlBuilder SqlBuilder { get; set; }
         QueryBuilder QueryBuilder { get; set; }
+        bool IsCache { get; set; }
+        int CacheTime { get; set; }
         ISugarQueryable<T> Clone();
         ISugarQueryable<T> AS<T2>(string tableName);
         ISugarQueryable<T> AS(string tableName);
         ISugarQueryable<T> With(string withString);
         ISugarQueryable<T> Filter(string FilterName, bool isDisabledGobalFilter = false);
         ISugarQueryable<T> Mapper(Action<T> mapperAction);
+        ISugarQueryable<T> Mapper<AType, BType, MappingType>(Expression<Func<MappingType, ManyToMany>> expression);
         ISugarQueryable<T> Mapper(Action<T, MapperCache<T>> mapperAction);
         ISugarQueryable<T> Mapper<TObject>(Expression<Func<T, TObject>> mapperObject, Expression<Func<T, object>> mainField, Expression<Func<T, object>> childField);
         ISugarQueryable<T> Mapper<TObject>(Expression<Func<T, List<TObject>>> mapperObject, Expression<Func<T, object>> mainField, Expression<Func<T, object>> childField);
@@ -139,7 +142,8 @@ namespace SqlSugar
         string ToJsonPage(int pageIndex, int pageSize, ref int totalNumber);
         Task<string> ToJsonPageAsync(int pageIndex, int pageSize, RefAsync<int> totalNumber);
         KeyValuePair<string, List<SugarParameter>> ToSql();
-
+        List<T> ToParentList(Expression<Func<T, object>> parentIdExpression, object primaryKeyValue);
+        Task<List<T>> ToParentListAsync(Expression<Func<T, object>> parentIdExpression, object primaryKeyValue);
         List<T> ToTree(Expression<Func<T,IEnumerable<object>>> childListExpression, Expression<Func<T,object>> parentIdExpression,object rootValue);
         Task<List<T>> ToTreeAsync(Expression<Func<T, IEnumerable<object>>> childListExpression, Expression<Func<T, object>> parentIdExpression, object rootValue);
         DataTable ToDataTable();
@@ -162,6 +166,9 @@ namespace SqlSugar
         void AddQueue();
         ISugarQueryable<T> IgnoreColumns(Expression<Func<T, object>> columns);
         ISugarQueryable<T> IgnoreColumns(params string[] columns);
+        DataTable ToPivotTable<TColumn, TRow, TData>(Func<T, TColumn> columnSelector,Expression<Func<T, TRow>> rowSelector,Func<IEnumerable<T>, TData> dataSelector);
+        List<dynamic> ToPivotList<TColumn, TRow, TData>(Func<T, TColumn> columnSelector, Expression<Func<T, TRow>> rowSelector, Func<IEnumerable<T>, TData> dataSelector);
+        string ToPivotJson<TColumn, TRow, TData>(Func<T, TColumn> columnSelector, Expression<Func<T, TRow>> rowSelector, Func<IEnumerable<T>, TData> dataSelector);
     }
     public partial interface ISugarQueryable<T, T2> : ISugarQueryable<T>
     {

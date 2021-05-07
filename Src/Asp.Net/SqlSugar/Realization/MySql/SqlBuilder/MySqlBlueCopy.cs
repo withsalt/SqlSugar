@@ -14,6 +14,7 @@ namespace SqlSugar
         internal SqlSugarProvider Context { get; set; }
         internal ISqlBuilder Builder { get; set; }
         internal T[] Entitys { get; set; }
+        internal string Chara { get; set; }
         private MySqlBlueCopy()
         {
 
@@ -24,11 +25,18 @@ namespace SqlSugar
             this.Builder = builder;
             this.Entitys = entitys;
         }
-    
+        public bool ExecuteBlueCopy(string characterSet) 
+        {
+            this.Chara = characterSet;
+            return ExecuteBlueCopy();
+        }
+
         public bool ExecuteBlueCopy()
         {
             var IsBulkLoad = false;
             if (Entitys == null || Entitys.Length <= 0)
+                return IsBulkLoad;
+            if (Entitys.First() == null && Entitys.Length ==1)
                 return IsBulkLoad;
             DataTable dt = new DataTable();
             Type type = typeof(T);
@@ -40,7 +48,7 @@ namespace SqlSugar
             Array.ForEach(entity.Columns.ToArray(), p => {
                 if (!p.IsIgnore&& !p.IsOnlyIgnoreInsert)
                 {
-                    pList.Add(p.PropertyInfo); dt.Columns.Add(p.PropertyName);
+                    pList.Add(p.PropertyInfo); dt.Columns.Add(p.DbColumnName);
                 }
             });
             DataRow row = null;
@@ -52,21 +60,21 @@ namespace SqlSugar
                     var name = p.Name;
                     if (entity.Columns.Any(it => it.PropertyName == name))
                     {
-                        name=entity.Columns.First(it => it.PropertyName == name).DbColumnName;
+                        name = entity.Columns.First(it => it.PropertyName == name).DbColumnName;
                     }
-                    row[name] = p.GetValue(item, null);
+                    row[name] = GetValue(p, item);
                 });
                 dt.Rows.Add(row);
             }
-            var dllPath = AppDomain.CurrentDomain.BaseDirectory + "failFiles";
+            var dllPath =Path.Combine(AppDomain.CurrentDomain.BaseDirectory , "failFiles");
             DirectoryInfo dir = new DirectoryInfo(dllPath);
             if (!dir.Exists)
             {
                 dir.Create();
             }
-            var fileName = dllPath + "\\" + Guid.NewGuid().ToString() + ".csv";
+            var fileName =Path.Combine( dllPath , Guid.NewGuid().ToString() + ".csv");
             var dataTableToCsv = DataTableToCsvString(dt);
-            File.WriteAllText(fileName, dataTableToCsv, Encoding.UTF8);
+            File.WriteAllText(fileName, dataTableToCsv, new UTF8Encoding(false));
             MySqlConnection conn = this.Context.Ado.Connection as MySqlConnection;
             try
             {
@@ -74,7 +82,7 @@ namespace SqlSugar
                 // IsolationLevel.Parse
                 MySqlBulkLoader bulk = new MySqlBulkLoader(conn)
                 {
-                    CharacterSet = "UTF8",
+                    CharacterSet = GetChara(),
                     FieldTerminator = ",",
                     FieldQuotationCharacter = '"',
                     EscapeCharacter = '"',
@@ -108,6 +116,24 @@ namespace SqlSugar
             return Task.FromResult(ExecuteBlueCopy());
         }
 
+        public Task<bool> ExecuteBlueCopyAsync(string characterSet)
+        {
+            this.Chara = characterSet;
+            return Task.FromResult(ExecuteBlueCopy());
+        }
+
+        #region  Helper
+        private string GetChara()
+        {
+            if (this.Chara == null)
+            {
+                return "UTF8";
+            }
+            else
+            {
+                return this.Chara;
+            }
+        }
 
         private void CloseDb()
         {
@@ -144,5 +170,21 @@ namespace SqlSugar
             }
             return sb.ToString();
         }
+
+
+        private static object GetValue(PropertyInfo p, T item)
+        {
+            var result= p.GetValue(item, null);
+            if (result != null && UtilMethods.GetUnderType(p.PropertyType) == UtilConstants.BoolType) 
+            {
+                if (result.ObjToBool() == false) 
+                {
+                    result = null;
+                }
+            }
+            return result;
+        }
+
+        #endregion
     }
 }

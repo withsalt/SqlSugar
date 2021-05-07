@@ -40,6 +40,7 @@ namespace SqlSugar
         public int ExternalPageIndex { get; set; }
         public int ExternalPageSize { get; set; }
         public int? Take { get; set; }
+        public bool DisableTop { get; set; }
         public string OrderByValue { get; set; }
         public object SelectValue { get; set; }
         public string SelectCacheKey { get; set; }
@@ -47,6 +48,7 @@ namespace SqlSugar
 
 
         public Type EntityType { get; set; }
+        public Type ResultType { get; set; }
         public string TableWithString { get; set; }
         public string GroupByValue { get; set; }
         public string PartitionByValue { get; set; }
@@ -238,6 +240,7 @@ namespace SqlSugar
             {
                 resolveExpress.PgSqlIsAutoToLower = true;
             }
+            resolveExpress.RootExpression = expression;
             resolveExpress.JoinQueryInfos = Builder.QueryBuilder.JoinQueryInfos;
             resolveExpress.IsSingle = IsSingle();
             resolveExpress.MappingColumns = Context.MappingColumns;
@@ -258,7 +261,7 @@ namespace SqlSugar
             var isSingleTableHasSubquery = IsSingle() && resolveExpress.SingleTableNameSubqueryShortName.HasValue();
             if (isSingleTableHasSubquery)
             {
-                Check.Exception(!string.IsNullOrEmpty(this.TableShortName) && resolveExpress.SingleTableNameSubqueryShortName != this.TableShortName, "{0} and {1} need same name");
+                Check.Exception(!string.IsNullOrEmpty(this.TableShortName) && resolveExpress.SingleTableNameSubqueryShortName != this.TableShortName, "{0} and {1} need same name", resolveExpress.SingleTableNameSubqueryShortName, this.TableShortName);
                 this.TableShortName = resolveExpress.SingleTableNameSubqueryShortName;
             }
             return result;

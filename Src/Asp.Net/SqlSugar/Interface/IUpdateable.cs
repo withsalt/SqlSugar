@@ -42,7 +42,7 @@ namespace SqlSugar
         /// <returns></returns>
         IUpdateable<T> WhereColumns(Expression<Func<T, object>> columns);
         IUpdateable<T> WhereColumns(string columnName);
-        IUpdateable<T> WhereColumns(string [] columnNames);
+        IUpdateable<T> WhereColumns(params string [] columnNames);
 
         /// <summary>
         /// .UpdateColumns(it=>new{ it.Name,it.Price})
@@ -87,6 +87,8 @@ namespace SqlSugar
         IUpdateable<T> EnableDiffLogEvent(object businessData = null);
         IUpdateable<T> ReSetValue(Expression<Func<T, bool>> setValueExpression);
         IUpdateable<T> RemoveDataCache();
+        IUpdateable<T> RemoveDataCache(string likeString);
+        IUpdateable<T> CallEntityMethod(Expression<Action<T>> method);
         KeyValuePair<string,List<SugarParameter>> ToSql();
         void AddQueue();
  

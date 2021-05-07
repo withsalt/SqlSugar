@@ -11,6 +11,9 @@ namespace SqlSugar
         private SugarTable() { }
         public string TableName { get; set; }
         public string TableDescription { get; set; }
+        public bool IsDisabledDelete { get; set; }
+        public bool IsDisabledUpdateAll { get; set; }
+
         public SugarTable(string tableName) {
             this.TableName = tableName;
         }
@@ -18,6 +21,13 @@ namespace SqlSugar
         {
             this.TableName = tableName;
             this.TableDescription = tableDescription;
+        }
+
+        public SugarTable(string tableName, string tableDescription,bool isDisabledDelete)
+        {
+            this.TableName = tableName;
+            this.TableDescription = tableDescription;
+            this.IsDisabledDelete = isDisabledDelete;
         }
     }
    [AttributeUsage(AttributeTargets.Property , Inherited = true)]
@@ -180,6 +190,17 @@ namespace SqlSugar
             set { _IsArray = value; }
         }
 
+    }
+
+
+    [AttributeUsage(AttributeTargets.Class, Inherited = true)]
+    public class TenantAttribute :Attribute
+    {
+        public object configId { get; set; }
+        public TenantAttribute(object configId) 
+        {
+            this.configId = configId;
+        }
     }
 
 }
